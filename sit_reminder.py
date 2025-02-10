@@ -72,6 +72,19 @@ class DesktopTimer(QWidget):
         # 用于跟踪鼠标拖动
         self.dragging = False
         self.offset = None
+        self.position = None
+
+    def save_position(self):
+        self.position = self.pos()
+        return {"x": self.position.x(), "y": self.position.y()}
+
+    def restore_position(self, position):
+        if position:
+            self.move(position["x"], position["y"])
+        else:
+            # 默认位置：屏幕右上角
+            screen = QApplication.primaryScreen().geometry()
+            self.move(screen.width() - 150, 10)
 
     def update_time(self, time_text):
         self.time_text.setText(time_text)
@@ -96,6 +109,9 @@ class DesktopTimer(QWidget):
 
     def mouseReleaseEvent(self, event):
         self.dragging = False
+        # 保存新位置
+        if hasattr(self, 'parent_window'):
+            self.parent_window.save_settings()
 
 
 class SitReminder(QMainWindow):
@@ -116,6 +132,7 @@ class SitReminder(QMainWindow):
         self.timer.timeout.connect(self.update_timer)
         
         self.desktop_timer = DesktopTimer()
+        self.desktop_timer.parent_window = self  # 添加对父窗口的引用
         self.init_ui()
         self.init_tray()
         self.load_settings()
@@ -288,6 +305,7 @@ class SitReminder(QMainWindow):
             "work_time": self.work_time,
             "rest_time": self.rest_time,
             "show_on_desktop": self.show_on_desktop,
+            "timer_position": self.desktop_timer.save_position(),  # 保存位置
         }
         with open("sit_reminder_settings.json", "w") as f:
             json.dump(settings, f)
@@ -305,6 +323,10 @@ class SitReminder(QMainWindow):
                 self.work_spinbox.setValue(self.work_time)
                 self.rest_spinbox.setValue(self.rest_time)
                 self.desktop_checkbox.setChecked(self.show_on_desktop)
+                
+                # 恢复位置
+                timer_position = settings.get("timer_position", None)
+                self.desktop_timer.restore_position(timer_position)
                 
                 # 非首次运行才自动启动计时器
                 QTimer.singleShot(100, self.start_timer)
