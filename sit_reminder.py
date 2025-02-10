@@ -26,78 +26,6 @@ from PySide6.QtGui import (
 )
 
 
-class DesktopTimer(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowFlags(
-            Qt.FramelessWindowHint | 
-            Qt.WindowStaysOnTopHint | 
-            Qt.Tool
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        
-        layout = QVBoxLayout(self)
-        layout.setSpacing(0)
-        layout.setContentsMargins(5, 5, 5, 5)
-
-        self.status_text = QLabel("准备就绪")
-        self.status_text.setStyleSheet("""
-            QLabel {
-                font-size: 14px;
-                color: #2196f3;
-                background-color: rgba(255, 255, 255, 180);
-                padding: 3px;
-                border-radius: 3px;
-            }
-        """)
-        self.time_text = QLabel("00:00")
-        self.time_text.setStyleSheet("""
-            QLabel {
-                font-size: 24px;
-                font-weight: bold;
-                color: #2196f3;
-                background-color: rgba(255, 255, 255, 180);
-                padding: 5px;
-                border-radius: 5px;
-            }
-        """)
-
-        layout.addWidget(self.status_text, alignment=Qt.AlignCenter)
-        layout.addWidget(self.time_text, alignment=Qt.AlignCenter)
-        
-        # 初始位置：屏幕右上角
-        screen = QApplication.primaryScreen().geometry()
-        self.move(screen.width() - 150, 10)
-
-        # 用于跟踪鼠标拖动
-        self.dragging = False
-        self.offset = None
-
-    def update_time(self, time_text):
-        self.time_text.setText(time_text)
-
-    def update_status(self, status):
-        status_map = {
-            "工作中": "⌛ 工作中...",
-            "休息中": "☕ 休息时间",
-            "已停止": "⏹️ 已停止",
-            "准备就绪": "✅ 准备就绪"
-        }
-        self.status_text.setText(status_map.get(status, status))
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.dragging = True
-            self.offset = event.pos()
-
-    def mouseMoveEvent(self, event):
-        if self.dragging:
-            self.move(event.globalPos() - self.offset)
-
-    def mouseReleaseEvent(self, event):
-        self.dragging = False
-
-
 class SitReminder(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -111,18 +39,13 @@ class SitReminder(QMainWindow):
         self.remaining_time = 0
         self.is_resting = False
 
-        # 初始化计时器
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_timer)
-        
-        self.desktop_timer = DesktopTimer()
         self.init_ui()
         self.init_tray()
         self.load_settings()
-        
-        # 确保在首次运行时也能正确显示桌面计时器
-        if self.show_on_desktop:
-            self.desktop_timer.show()
+
+        # 初始化计时器
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_timer)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -206,14 +129,7 @@ class SitReminder(QMainWindow):
         tray_menu.addAction(show_action)
         tray_menu.addAction(quit_action)
         self.tray_icon.setContextMenu(tray_menu)
-
-        self.tray_icon.activated.connect(self.tray_icon_activated)
         self.tray_icon.show()
-
-    def tray_icon_activated(self, reason):
-        if reason == QSystemTrayIcon.DoubleClick:
-            self.show()
-            self.activateWindow()
 
     def create_fallback_icon(self):
         """创建后备图标"""
@@ -247,8 +163,6 @@ class SitReminder(QMainWindow):
         self.timer.stop()
         self.time_label.setText("00:00")
         self.status_label.setText("已停止")
-        self.desktop_timer.update_time("00:00")
-        self.desktop_timer.update_status("已停止")
 
     def update_timer(self):
         self.remaining_time -= 1
@@ -267,20 +181,17 @@ class SitReminder(QMainWindow):
         seconds = self.remaining_time % 60
         time_text = f"{minutes:02d}:{seconds:02d}"
         self.time_label.setText(time_text)
-        self.desktop_timer.update_time(time_text)
-        self.desktop_timer.update_status(self.status_label.text())
 
     def update_status(self):
         status = "休息中" if self.is_resting else "工作中"
         self.status_label.setText(status)
-        self.desktop_timer.update_status(status)
 
     def toggle_desktop_display(self, state):
         self.show_on_desktop = bool(state)
         if self.show_on_desktop:
-            self.desktop_timer.show()
+            self.show()
         else:
-            self.desktop_timer.hide()
+            self.hide()
         self.save_settings()
 
     def save_settings(self):
@@ -305,26 +216,19 @@ class SitReminder(QMainWindow):
                 self.work_spinbox.setValue(self.work_time)
                 self.rest_spinbox.setValue(self.rest_time)
                 self.desktop_checkbox.setChecked(self.show_on_desktop)
-                
-                # 延迟启动计时器
-                QTimer.singleShot(100, self.start_timer)
-
-                # 如果勾选了桌面显示，则不显示主面板
-                if self.show_on_desktop:
-                    self.hide()
-                else:
-                    self.show()
         except FileNotFoundError:
-            # 首次运行时显示主面板并开始计时
-            self.show()
-            QTimer.singleShot(100, self.start_timer)
+            pass
 
     def closeEvent(self, event):
-        event.ignore()
-        self.hide()
+        if self.show_on_desktop:
+            event.accept()
+        else:
+            event.ignore()
+            self.hide()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SitReminder()
+    window.show()
     sys.exit(app.exec())
