@@ -111,15 +111,18 @@ class SitReminder(QMainWindow):
         self.remaining_time = 0
         self.is_resting = False
 
-        self.init_ui()
-        self.init_tray()
-        self.load_settings()
-
         # 初始化计时器
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_timer)
-
+        
         self.desktop_timer = DesktopTimer()
+        self.init_ui()
+        self.init_tray()
+        self.load_settings()
+        
+        # 确保在首次运行时也能正确显示桌面计时器
+        if self.show_on_desktop:
+            self.desktop_timer.show()
 
     def init_ui(self):
         central_widget = QWidget()
@@ -203,7 +206,14 @@ class SitReminder(QMainWindow):
         tray_menu.addAction(show_action)
         tray_menu.addAction(quit_action)
         self.tray_icon.setContextMenu(tray_menu)
+
+        self.tray_icon.activated.connect(self.tray_icon_activated)
         self.tray_icon.show()
+
+    def tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.show()
+            self.activateWindow()
 
     def create_fallback_icon(self):
         """创建后备图标"""
@@ -295,8 +305,19 @@ class SitReminder(QMainWindow):
                 self.work_spinbox.setValue(self.work_time)
                 self.rest_spinbox.setValue(self.rest_time)
                 self.desktop_checkbox.setChecked(self.show_on_desktop)
+                
+                # 延迟启动计时器
+                QTimer.singleShot(100, self.start_timer)
+
+                # 如果勾选了桌面显示，则不显示主面板
+                if self.show_on_desktop:
+                    self.hide()
+                else:
+                    self.show()
         except FileNotFoundError:
-            pass
+            # 首次运行时显示主面板并开始计时
+            self.show()
+            QTimer.singleShot(100, self.start_timer)
 
     def closeEvent(self, event):
         event.ignore()
@@ -306,7 +327,4 @@ class SitReminder(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SitReminder()
-    if window.show_on_desktop:
-        window.desktop_timer.show()
-    window.show()
     sys.exit(app.exec())
