@@ -25,17 +25,12 @@ from PySide6.QtGui import (
     QBrush,
 )
 
-
 class DesktopTimer(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(
-            Qt.FramelessWindowHint | 
-            Qt.WindowStaysOnTopHint | 
-            Qt.Tool
-        )
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        
+
         layout = QVBoxLayout(self)
         layout.setSpacing(0)
         layout.setContentsMargins(5, 5, 5, 5)
@@ -64,7 +59,7 @@ class DesktopTimer(QWidget):
 
         layout.addWidget(self.status_text, alignment=Qt.AlignCenter)
         layout.addWidget(self.time_text, alignment=Qt.AlignCenter)
-        
+
         # 初始位置：屏幕右上角
         screen = QApplication.primaryScreen().geometry()
         self.move(screen.width() - 150, 10)
@@ -94,7 +89,7 @@ class DesktopTimer(QWidget):
             "工作中": "⌛ 工作中...",
             "休息中": "☕ 休息时间",
             "已停止": "⏹️ 已停止",
-            "准备就绪": "✅ 准备就绪"
+            "准备就绪": "✅ 准备就绪",
         }
         self.status_text.setText(status_map.get(status, status))
 
@@ -110,7 +105,7 @@ class DesktopTimer(QWidget):
     def mouseReleaseEvent(self, event):
         self.dragging = False
         # 保存新位置
-        if hasattr(self, 'parent_window'):
+        if hasattr(self, "parent_window"):
             self.parent_window.save_settings()
 
 
@@ -130,13 +125,13 @@ class SitReminder(QMainWindow):
         # 初始化计时器
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_timer)
-        
+
         self.desktop_timer = DesktopTimer()
         self.desktop_timer.parent_window = self  # 添加对父窗口的引用
         self.init_ui()
         self.init_tray()
         self.load_settings()
-        
+
         # 确保在首次运行时也能正确显示桌面计时器
         if self.show_on_desktop:
             self.desktop_timer.show()
@@ -323,11 +318,11 @@ class SitReminder(QMainWindow):
                 self.work_spinbox.setValue(self.work_time)
                 self.rest_spinbox.setValue(self.rest_time)
                 self.desktop_checkbox.setChecked(self.show_on_desktop)
-                
+
                 # 恢复位置
                 timer_position = settings.get("timer_position", None)
                 self.desktop_timer.restore_position(timer_position)
-                
+
                 # 非首次运行才自动启动计时器
                 QTimer.singleShot(100, self.start_timer)
 
