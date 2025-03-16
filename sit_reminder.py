@@ -68,6 +68,11 @@ class DesktopTimer(QWidget):
         self.dragging = False
         self.offset = None
         self.position = None
+        
+        # 用于检测单击和双击
+        self.click_timer = QTimer()
+        self.click_timer.setSingleShot(True)
+        self.click_timer.timeout.connect(self.handle_single_click)
 
     def save_position(self):
         self.position = self.pos()
@@ -90,16 +95,34 @@ class DesktopTimer(QWidget):
             "休息中": "☕ 休息时间",
             "已停止": "⏹️ 已停止",
             "准备就绪": "✅ 准备就绪",
+            "已暂停": "⏸️ 已暂停",
         }
         self.status_text.setText(status_map.get(status, status))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            # 如果正在拖动，则不处理点击事件
+            if self.dragging:
+                return
+                
+            # 启动点击计时器，用于区分单击和双击
+            if self.click_timer.isActive():
+                # 如果计时器已经在运行，说明是双击
+                self.click_timer.stop()
+                self.handle_double_click()
+            else:
+                # 否则启动计时器，等待可能的第二次点击
+                self.click_timer.start(250)  # 250毫秒内的第二次点击被视为双击
+            
+            # 记录拖动起始位置
             self.dragging = True
             self.offset = event.pos()
 
     def mouseMoveEvent(self, event):
         if self.dragging:
+            # 如果移动了一定距离，则取消点击计时器
+            if (event.globalPos() - self.mapToGlobal(self.offset)).manhattanLength() > 3:
+                self.click_timer.stop()
             self.move(event.globalPos() - self.offset)
 
     def mouseReleaseEvent(self, event):
@@ -107,6 +130,17 @@ class DesktopTimer(QWidget):
         # 保存新位置
         if hasattr(self, "parent_window"):
             self.parent_window.save_settings()
+
+    def handle_single_click(self):
+        # 单击切换开始/暂停
+        if hasattr(self, "parent_window"):
+            self.parent_window.toggle_pause()
+
+    def handle_double_click(self):
+        # 双击显示设置面板
+        if hasattr(self, "parent_window"):
+            self.parent_window.show()
+            self.parent_window.activateWindow()
 
 
 class SitReminder(QMainWindow):
@@ -121,6 +155,7 @@ class SitReminder(QMainWindow):
         self.show_on_desktop = True
         self.remaining_time = 0
         self.is_resting = False
+        self.is_paused = False  # 新增暂停状态变量
 
         # 初始化计时器
         self.timer = QTimer()
@@ -166,7 +201,7 @@ class SitReminder(QMainWindow):
         # 控制按钮
         control_layout = QHBoxLayout()
         self.start_button = QPushButton("开始")
-        self.start_button.clicked.connect(self.start_timer)
+        self.start_button.clicked.connect(self.toggle_pause)
         self.stop_button = QPushButton("停止")
         self.stop_button.clicked.connect(self.stop_timer)
 
@@ -246,17 +281,45 @@ class SitReminder(QMainWindow):
 
         self.tray_icon.setIcon(QIcon(icon_pixmap))
 
+    def toggle_pause(self):
+        # 如果计时器未运行，则启动计时器
+        if not self.timer.isActive() and not self.is_paused:
+            self.start_timer()
+            return
+            
+        # 如果计时器正在运行，则暂停
+        if self.timer.isActive():
+            self.timer.stop()
+            self.is_paused = True
+            self.start_button.setText("继续")
+            self.status_label.setText("已暂停")
+            self.desktop_timer.update_status("已暂停")
+        # 如果计时器已暂停，则继续
+        else:
+            self.timer.start(1000)
+            self.is_paused = False
+            self.start_button.setText("暂停")
+            # 恢复之前的状态显示
+            self.update_status()
+
     def start_timer(self):
-        self.work_time = self.work_spinbox.value()
-        self.rest_time = self.rest_spinbox.value()
-        self.remaining_time = self.work_time * 60
-        self.is_resting = False
+        # 如果是从停止状态开始，则重置计时器
+        if not self.is_paused:
+            self.work_time = self.work_spinbox.value()
+            self.rest_time = self.rest_spinbox.value()
+            self.remaining_time = self.work_time * 60
+            self.is_resting = False
+            
         self.timer.start(1000)  # 每秒更新一次
+        self.is_paused = False
+        self.start_button.setText("暂停")
         self.save_settings()
         self.update_status()
 
     def stop_timer(self):
         self.timer.stop()
+        self.is_paused = False
+        self.start_button.setText("开始")
         self.time_label.setText("00:00")
         self.status_label.setText("已停止")
         self.desktop_timer.update_time("00:00")
